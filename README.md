@@ -9,3 +9,10 @@ required packages are
 - ```numpy```
 - ```matplotlib```
 - ```pillow```
+
+
+## Data Structure
+
+### Delay time ordering
+
+The log file of each cycle contains the absolute times corresponding to the stage positions. The delay times are in reverse order compared to the absolute times. Hence, larger stage position corresponds to longer absolute time means earlier delay times
