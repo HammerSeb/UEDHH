@@ -5,6 +5,8 @@ from os import PathLike, listdir
 from os.path import join, isfile
 from re import findall
 from scipy.constants import speed_of_light
+from tqdm import tqdm
+
 
 class StaticDataSet:
     def __init__(self, path: PathLike, background: Union[PathLike, None] = None):
@@ -118,7 +120,7 @@ class Dataset:
         self.data = np.zeros((len(self.delay_times), self.pump_off.shape[0], self.pump_off.shape[1]))
         if self.progress:
             print("loading cycles")
-            for cycle in cycles:
+            for cycle in tqdm(cycles):
                 self.data += np.array(self._load_cycle(cycle))
             
             self.data /= len(self.cycles)

@@ -9,7 +9,7 @@ required packages are
 - ```numpy```
 - ```matplotlib```
 - ```pillow```
-
+- ```tqdm```
 
 ## Data Structure
 
