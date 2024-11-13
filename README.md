@@ -10,6 +10,7 @@ required packages are
 - ```matplotlib```
 - ```pillow```
 - ```tqdm```
+- ```h5py```
 
 ## Data Structure
 

@@ -1,6 +1,7 @@
 # Own files for testing
 dataset_test.py
 *.npy
+run2_analysis.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

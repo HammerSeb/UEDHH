@@ -6,6 +6,7 @@ from os.path import join, isfile
 from re import findall
 from scipy.constants import speed_of_light
 from tqdm import tqdm
+import h5py
 
 
 class StaticDataSet:
@@ -63,7 +64,14 @@ class StaticDataSet:
 
 
 class Dataset:
-    def __init__(self, basedir: PathLike, correct_laser:bool = True, all_imgs: bool = True, progress: bool = True, cycles: Union[int,tuple] = None, ignore: list = None):
+    def __init__(self, 
+                 basedir: PathLike,
+                 mask: np.ndarray = None,
+                 correct_laser:bool = True,
+                 all_imgs: bool = True,
+                 progress: bool = True,
+                 cycles: Union[int,tuple] = None,
+                 ignore: list = None):
         """
         _summary_
 
@@ -83,6 +91,8 @@ class Dataset:
         
         self.basedir = basedir
 
+        self.mask = mask
+
         self.correct_laser = correct_laser
 
         if all_imgs:
@@ -95,9 +105,15 @@ class Dataset:
         self.cycles = cycles
         self.ignore = ignore
 
+        self.real_time_intensities = []
+        self.loaded_files = []
+
         if self.progress:
             print("loading pump offs")
         self._load_pump_offs()
+
+        if not self.mask:
+            self.mask = np.ones(self.pump_off.shape)
 
         if self.progress:
             print("loading pump only")
@@ -132,6 +148,24 @@ class Dataset:
             self.data /= len(self.cycles)
 
 
+        self.delay_times = self.delay_times[::-1]
+        self.stage_positions = self.stage_positions[::-1]
+        self.data = self.data[::-1]
+
+    # def save(self, filename):
+    #     with h5py.File(filename, "w") as f:
+    #         f.create_dataset("time_points", data=self.delay_times)
+    #         f.create_dataset("valid_mask", data=self.mask)
+    #         proc_group = f.create_group("processed")
+    #         proc_group.create_dataset("equilibrium", data=self.pump_off)
+    #         proc_group.create_dataset("intensity", data=np.moveaxis(self.data, 0, -1))
+    #         realtime_group = f.create_group("real_time")
+    #         realtime_group.create_dataset(
+    #             "minutes", data=[td.total_seconds() / 60 for td in self.timedeltas]
+    #         )
+    #         realtime_group.create_dataset("intensity", data=self.real_time_intensities)
+    #         realtime_group.create_dataset("time_points", data=self.real_time_delays)
+
     def _load_cycle(self, cycle):
         _cycle_path = join(self.basedir, f"Cycle {cycle}")
         _filelist = listdir(_cycle_path)
@@ -140,7 +174,7 @@ class Dataset:
             _position_files = []
             _name = f"z_ProbeOnPumpOn_{str(position).replace(".",",")} mm_Frm"
             for file in _filelist:
-                if _name in file and file.endswith(".npy") and file not in self.ignored_files:
+                if _name in file and file.endswith(".npy") and join(_cycle_path,file) not in self.ignored_files:
                     _position_files.append(file)
             
             if not _position_files:
@@ -149,13 +183,16 @@ class Dataset:
             _position_data = []
             for file in _position_files:
                 _img = np.load(join(_cycle_path,file))
+                self.real_time_intensities.append(_img.sum())
+                self.loaded_files.append(join(_cycle_path,file))
+
                 if self.all_imgs_flag:
                     self.all_imgs.append(_img)
                 
                 if self.correct_laser:
-                    _position_data.append(_img - self.pump_only)
+                    _position_data.append((_img - self.pump_only)*self.mask)
                 else:
-                    _position_data.append(_img)
+                    _position_data.append(_img*self.mask)
             
             cycle_data.append(np.mean(_position_data, axis=0))
         return cycle_data
@@ -177,9 +214,11 @@ class Dataset:
         self.ignored_files = [0]
         for ign in self.ignore:
             for frame in ign[2]:
-                _ignored_file = join(
-                    join(self.basedir, f"Cycle {int(ign[0])}"), f"z_ProbeOffPumpOff_{ign[1]} mm_Frm{int(frame)}.npy"
+                self.ignored_files.append(
+                    join(
+                    join(self.basedir, f"Cycle {int(ign[0])}"), f"z_ProbeOnPumpOn_{ign[1]} mm_Frm{int(frame)}.npy"
                     )
+                )
 
     def _load_pump_offs(self):
         self.pump_offs = []
