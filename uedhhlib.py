@@ -68,27 +68,38 @@ class Dataset:
                  basedir: PathLike,
                  mask: np.ndarray = None,
                  correct_laser:bool = True,
-                 all_imgs: bool = True,
+                 all_imgs: bool = False,
                  progress: bool = True,
                  cycles: Union[int,tuple] = None,
                  ignore: list = None):
         """
-        _summary_
-
+        Loads full UED dataset taken in the SchwEpp group at the MPSD for further analysis. 
+        save() method saves h5 file which can be opened in Iris.  
         Parameters
         ----------
         basedir : PathLike
-            _description_
+            base directory cotaining the "Cycle X" directories
+        mask : np.ndarray, optional
+            constant mask applied to all images of the delay scans. If 'None' all points of the images are used, by default None
+        correct_laser : bool, optional
+            wether laser background is corrected for or not, by default True
         all_imgs : bool, optional
-            _description_, by default True
+            wether all raw images are kept or just the final data set is kept. Using this makes the data set LARGE. USE with care!, by default False
         progress : bool, optional
-            _description_, by default True
+            turn on progress notification during data loading, by default True
         cycles : Union[int,tuple], optional
-            _description_, by default None
+            For now, give this parameter an iterable containing the cycle number you want to load, e.g: (1,2,4,7,10,11,12) to load cycles 1,2,4.... you get it
         ignore : list, optional
-            list of tuples of the form (cycle_number, stage_position as string, (frame1, frame2,...)). To ignore three frames of cycle 5 at stage position 105.4 mm use (5, "105,4", (1,2,3)).
+             list of tuples of the form (cycle_number, stage_position as string, (frame1, frame2,...)). To ignore three frames of cycle 5 at stage position 105.4 mm use (5, "105,4", (1,2,3)).
+
+
+        Returns
+        -------
+        _type_
+            _description_
         """
         
+
         self.basedir = basedir
 
         self.mask = mask
@@ -152,19 +163,19 @@ class Dataset:
         self.stage_positions = self.stage_positions[::-1]
         self.data = self.data[::-1]
 
-    # def save(self, filename):
-    #     with h5py.File(filename, "w") as f:
-    #         f.create_dataset("time_points", data=self.delay_times)
-    #         f.create_dataset("valid_mask", data=self.mask)
-    #         proc_group = f.create_group("processed")
-    #         proc_group.create_dataset("equilibrium", data=self.pump_off)
-    #         proc_group.create_dataset("intensity", data=np.moveaxis(self.data, 0, -1))
-    #         realtime_group = f.create_group("real_time")
-    #         realtime_group.create_dataset(
-    #             "minutes", data=[td.total_seconds() / 60 for td in self.timedeltas]
-    #         )
-    #         realtime_group.create_dataset("intensity", data=self.real_time_intensities)
-    #         realtime_group.create_dataset("time_points", data=self.real_time_delays)
+    def save(self, filename):
+        with h5py.File(filename, "w") as f:
+            f.create_dataset("time_points", data=self.delay_times)
+            f.create_dataset("valid_mask", data=self.mask)
+            proc_group = f.create_group("processed")
+            proc_group.create_dataset("equilibrium", data=self.pump_off)
+            proc_group.create_dataset("intensity", data=np.moveaxis(self.data, 0, -1))
+            realtime_group = f.create_group("real_time")
+            realtime_group.create_dataset("intensity", data=self.real_time_intensities)
+            realtime_group.create_dataset("loaded_files", data=self.loaded_files)
+            if self.all_imgs_flag:
+                realtime_group.create_dataset("all_imgs", data=self.all_imgs)
+
 
     def _load_cycle(self, cycle):
         _cycle_path = join(self.basedir, f"Cycle {cycle}")
