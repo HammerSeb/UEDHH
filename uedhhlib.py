@@ -91,45 +91,40 @@ class Dataset:
             For now, give this parameter an iterable containing the cycle number you want to load, e.g: (1,2,4,7,10,11,12) to load cycles 1,2,4.... you get it
         ignore : list, optional
              list of tuples of the form (cycle_number, stage_position as string, (frame1, frame2,...)). To ignore three frames of cycle 5 at stage position 105.4 mm use (5, "105,4", (1,2,3)).
-
-
-        Returns
-        -------
-        _type_
-            _description_
         """
         
 
         self.basedir = basedir
-
         self.mask = mask
+        if not self.mask:
+            self.mask = np.ones(self.pump_off.shape)
 
         self.correct_laser = correct_laser
+        self.progress = progress
+        self.cycles = cycles
+        self.ignore = ignore
 
+        #decide if all images are kept or not
         if all_imgs:
             self.all_imgs = []
             self.all_imgs_flag = True
         else:
             self.all_imgs_flag = False
 
-        self.progress = progress
-        self.cycles = cycles
-        self.ignore = ignore
-
         self.real_time_intensities = []
         self.loaded_files = []
 
+        # load pump off files
         if self.progress:
             print("loading pump offs")
         self._load_pump_offs()
 
-        if not self.mask:
-            self.mask = np.ones(self.pump_off.shape)
-
+        # load laser only files
         if self.progress:
             print("loading pump only")
         self._load_pump_only()
 
+        # make list of ignored files
         if self.ignore:
             if self.progress:
                 print("compile list of ignored files")
@@ -137,33 +132,45 @@ class Dataset:
         else:
             self.ignored_files = []
 
+
+        # get delay time steps, smallest delay time is arbitrarily set to 0 ps
         if self.progress:
             print("accessing delay times")
         self.delaytime_from_stage_position = self._get_delay_times_mapping()
         self.delay_times = [self.delaytime_from_stage_position(position) for position in self.stage_positions]
 
+        # this array stores how many times a delay time step has no entry per cycle because all frames of a cycle at this state position had to be ignored due to arcing
         self._empties = np.zeros(len(self.delay_times))
 
+        # This is were all the data from each cycle is loaded and averaged
         self.data = np.zeros((len(self.delay_times), self.pump_off.shape[0], self.pump_off.shape[1]))
         if self.progress:
             print("loading cycles")
             for cycle in tqdm(cycles):
                 self.data += np.array(self._load_cycle(cycle))
             
-            self.data /= len(self.cycles)
+            self.data /= len(self.cycles)-self._empties
 
         else:
             for cycle in cycles:
                 self.data += np.array(self._load_cycle(cycle))
             
-            self.data /= len(self.cycles)
+            self.data /= len(self.cycles)-self._empties
 
-
+        # here we sort the data so that small delay times are at low index values just for convenience
         self.delay_times = self.delay_times[::-1]
         self.stage_positions = self.stage_positions[::-1]
         self.data = self.data[::-1]
 
-    def save(self, filename):
+    def save(self, filename: PathLike):
+        """
+        saves the dataset as an h5 file which can be read by Iris
+
+        Parameters
+        ----------
+        filename : PathLike
+            filepath
+        """
         with h5py.File(filename, "w") as f:
             f.create_dataset("time_points", data=self.delay_times)
             f.create_dataset("valid_mask", data=self.mask)
@@ -177,7 +184,20 @@ class Dataset:
                 realtime_group.create_dataset("all_imgs", data=self.all_imgs)
 
 
-    def _load_cycle(self, cycle):
+    def _load_cycle(self, cycle: int) -> list:
+        """
+        loads the data of cycle one.
+
+        Parameters
+        ----------
+        cycle : int
+            cycle number of cycle to be loaded
+
+        Returns
+        -------
+        list
+            list of arrays containing the diffraction data of each stage position averaged ober all recorded frames
+        """
         _cycle_path = join(self.basedir, f"Cycle {cycle}")
         _filelist = listdir(_cycle_path)
         cycle_data = []
@@ -208,7 +228,15 @@ class Dataset:
             cycle_data.append(np.mean(_position_data, axis=0))
         return cycle_data
                 
-    def _get_delay_times_mapping(self):
+    def _get_delay_times_mapping(self) ->  function:
+        """
+        get the delay time steps from Cycle 1
+
+        Returns
+        -------
+        function
+            this function maps a stage position to a relative time with respect to the lowest delay time
+        """
         self.stage_positions = []
         for file in sorted(listdir(join(self.basedir, "Cycle 1"))):
             if "ProbeOnPumpOn" in file and "Frm1" in file and file.endswith(".npy"):
@@ -222,6 +250,9 @@ class Dataset:
         return delaytime_from_stageposition
 
     def _make_ignored_files_list(self):
+        """
+        makes a list of files to be ignored during loading
+        """
         self.ignored_files = [0]
         for ign in self.ignore:
             for frame in ign[2]:
@@ -232,6 +263,9 @@ class Dataset:
                 )
 
     def _load_pump_offs(self):
+        """
+        loads the pump off data of all cycles and makes a mean pump off image from all of them
+        """
         self.pump_offs = []
         for cycle in self.cycles:
             _cycle_path = join(self.basedir,f"Cycle {int(cycle)}")
@@ -247,6 +281,9 @@ class Dataset:
             
 
     def _load_pump_only(self):
+        """
+        loads the pump only data of all cycles and makes a mean pump off image from all of them
+        """
         self.pump_onlys = []
         for cycle in self.cycles:
             _cycle_path = join(self.basedir,f"Cycle {int(cycle)}")
