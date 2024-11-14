@@ -2,6 +2,7 @@
 dataset_test.py
 *.npy
 run2_analysis.py
+run3_analysis.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
