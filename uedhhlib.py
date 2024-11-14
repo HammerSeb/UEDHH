@@ -133,9 +133,7 @@ class Dataset:
         #infere standard mask from pump off shape
         if not self.mask:
             self.mask = np.ones(self.pump_off.shape)
-
-      
-
+            
         # get delay time steps, smallest delay time is arbitrarily set to 0 ps
         if self.progress:
             print("accessing delay times")
