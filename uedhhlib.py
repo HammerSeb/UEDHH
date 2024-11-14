@@ -96,9 +96,6 @@ class Dataset:
 
         self.basedir = basedir
         self.mask = mask
-        if not self.mask:
-            self.mask = np.ones(self.pump_off.shape)
-
         self.correct_laser = correct_laser
         self.progress = progress
         self.cycles = cycles
@@ -132,6 +129,12 @@ class Dataset:
         else:
             self.ignored_files = []
 
+      
+        #infere standard mask from pump off shape
+        if not self.mask:
+            self.mask = np.ones(self.pump_off.shape)
+
+      
 
         # get delay time steps, smallest delay time is arbitrarily set to 0 ps
         if self.progress:
@@ -149,13 +152,13 @@ class Dataset:
             for cycle in tqdm(cycles):
                 self.data += np.array(self._load_cycle(cycle))
             
-            self.data /= len(self.cycles)-self._empties
+            self.data /= len(self.cycles)#-self._empties
 
         else:
             for cycle in cycles:
                 self.data += np.array(self._load_cycle(cycle))
             
-            self.data /= len(self.cycles)-self._empties
+            self.data /= len(self.cycles)#-self._empties
 
         # here we sort the data so that small delay times are at low index values just for convenience
         self.delay_times = self.delay_times[::-1]
@@ -228,7 +231,7 @@ class Dataset:
             cycle_data.append(np.mean(_position_data, axis=0))
         return cycle_data
                 
-    def _get_delay_times_mapping(self) ->  function:
+    def _get_delay_times_mapping(self):
         """
         get the delay time steps from Cycle 1
 
