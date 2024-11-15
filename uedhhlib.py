@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Literal
 import numpy as np
 from PIL import Image
 from os import PathLike, listdir
@@ -71,7 +71,7 @@ class Dataset:
                  all_imgs: bool = False,
                  progress: bool = True,
                  cycles: Union[int,tuple] = None,
-                 ignore: list = None):
+                 ignore: Union[list, Literal["std_filter"]] = None):
         """
         Loads full UED dataset taken in the SchwEpp group at the MPSD for further analysis. 
         save() method saves h5 file which can be opened in Iris.  
@@ -89,17 +89,21 @@ class Dataset:
             turn on progress notification during data loading, by default True
         cycles : Union[int,tuple], optional
             For now, give this parameter an iterable containing the cycle number you want to load, e.g: (1,2,4,7,10,11,12) to load cycles 1,2,4.... you get it
-        ignore : list, optional
-             list of tuples of the form (cycle_number, stage_position as string, (frame1, frame2,...)). To ignore three frames of cycle 5 at stage position 105.4 mm use (5, "105,4", (1,2,3)).
+        ignore : list, "std_filter
+             option are:
+              - list of tuples of the form (cycle_number, stage_position as string, (frame1, frame2,...)). To ignore three frames of cycle 5 at stage position 105.4 mm use (5, "105,4", (1,2,3)).
+              - "std_filter": uses the pump_off std as a reference. All images that have 5% std are automatically ignored during file loading
+
+              Note: Ingoring files can lead to errors if all frames of a single delay step are sorted out. I am working on a fix, handle with care for now.
         """
         
-
         self.basedir = basedir
         self.mask = mask
         self.correct_laser = correct_laser
         self.progress = progress
         self.cycles = cycles
         self.ignore = ignore
+
 
         #decide if all images are kept or not
         if all_imgs:
@@ -125,7 +129,8 @@ class Dataset:
         if self.ignore:
             if self.progress:
                 print("compile list of ignored files")
-            self._make_ignored_files_list()
+            if isinstance(self.ignore, list):
+                self._make_ignored_files_list()
         else:
             self.ignored_files = []
 
@@ -133,7 +138,7 @@ class Dataset:
         #infere standard mask from pump off shape
         if not self.mask:
             self.mask = np.ones(self.pump_off.shape)
-            
+
         # get delay time steps, smallest delay time is arbitrarily set to 0 ps
         if self.progress:
             print("accessing delay times")
@@ -205,9 +210,14 @@ class Dataset:
         for _idx, position in enumerate(self.stage_positions):
             _position_files = []
             _name = f"z_ProbeOnPumpOn_{str(position).replace(".",",")} mm_Frm"
-            for file in _filelist:
-                if _name in file and file.endswith(".npy") and join(_cycle_path,file) not in self.ignored_files:
-                    _position_files.append(file)
+            if isinstance(self.ignore, list):
+                for file in _filelist:
+                    if _name in file and file.endswith(".npy") and join(_cycle_path,file) not in self.ignored_files:
+                        _position_files.append(file)
+            else:
+                for file in _filelist:
+                    if _name in file and file.endswith(".npy") and join(_cycle_path,file):
+                        _position_files.append(file)
             
             if not _position_files:
                 self._empties[_idx] +=1
@@ -215,6 +225,10 @@ class Dataset:
             _position_data = []
             for file in _position_files:
                 _img = np.load(join(_cycle_path,file))
+                if isinstance(self.ignore, str) and self.ignore == "std_filter":
+                    self.real_time_stds.append(_img.std())
+                    if self.real_time_stds[-1] > 1.1*self._pump_off_std:
+                        continue
                 self.real_time_intensities.append(_img.sum())
                 self.loaded_files.append(join(_cycle_path,file))
 
@@ -277,8 +291,12 @@ class Dataset:
 
             for pumpoff in sorted(_pump_off_list):
                 self.pump_offs.append(np.load(pumpoff))
-
+            
         self.pump_off = np.mean(np.array(self.pump_offs), axis=0)
+
+        if isinstance(self.ignore, str) and self.ignore == "std_filter":
+            self.real_time_stds = []
+            self._pump_off_std = self.pump_off.std()
             
 
     def _load_pump_only(self):
