@@ -6,6 +6,7 @@ from os.path import join, isfile
 from re import findall
 from scipy.constants import speed_of_light
 from tqdm import tqdm
+from datetime import datetime
 import h5py
 
 
@@ -114,6 +115,7 @@ class Dataset:
 
         self.real_time_intensities = []
         self.loaded_files = []
+        self.timestamps= []
 
         # load pump off files
         if self.progress:
@@ -168,6 +170,18 @@ class Dataset:
         self.stage_positions = self.stage_positions[::-1]
         self.data = self.data[::-1]
 
+        # here we sort the image intensities, loaded files and images according the lab time they were recorded
+        if self.all_imgs_flag:
+            self.timestamps, self.all_imgs, self.real_time_intensities, self.loaded_files = zip(*sorted(
+                zip(self.timestamps,  self.all_imgs, self.real_time_intensities, self.loaded_files )
+            ))
+        else:
+            self.timestamps, self.real_time_intensities, self.loaded_files = zip(*sorted(
+                zip(self.timestamps, self.real_time_intensities, self.loaded_files )
+            ))
+
+
+
     def save(self, filename: PathLike):
         """
         saves the dataset as an h5 file which can be read by Iris
@@ -216,7 +230,7 @@ class Dataset:
                         _position_files.append(file)
             else:
                 for file in _filelist:
-                    if _name in file and file.endswith(".npy") and join(_cycle_path,file):
+                    if _name in file and file.endswith(".npy") and join(_cycle_path,file): #the "and join(...)" condition at the end is unnecessary and should be deleted in future versions
                         _position_files.append(file)
             
             if not _position_files:
@@ -231,6 +245,17 @@ class Dataset:
                         continue
                 self.real_time_intensities.append(_img.sum())
                 self.loaded_files.append(join(_cycle_path,file))
+                
+                # extract epoch timestamp from server-path of loaded file
+                _serverpath_file = file.split(".")[0] + ".txt"
+                with open(join(_cycle_path, _serverpath_file), "r") as f:
+                      self.timestamps.append(
+                          datetime.fromtimestamp(
+                              int(
+                                  findall( r"(?<=\\A1\\)\d+" ,f.readlines()[1])[0]
+                                  )
+                                )
+                          )
 
                 if self.all_imgs_flag:
                     self.all_imgs.append(_img)
