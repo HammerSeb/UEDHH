@@ -72,7 +72,7 @@ class Dataset:
                  all_imgs: bool = False,
                  progress: bool = True,
                  cycles: Union[int,tuple] = None,
-                 ignore: Union[list, Literal["std_filter"]] = None):
+                 ignore: list = None):
         """
         Loads full UED dataset taken in the SchwEpp group at the MPSD for further analysis. 
         save() method saves h5 file which can be opened in Iris.  
@@ -90,10 +90,9 @@ class Dataset:
             turn on progress notification during data loading, by default True
         cycles : Union[int,tuple], optional
             For now, give this parameter an iterable containing the cycle number you want to load, e.g: (1,2,4,7,10,11,12) to load cycles 1,2,4.... you get it
-        ignore : list, "std_filter
+        ignore : list
              option are:
-              - list of tuples of the form (cycle_number, stage_position as string, (frame1, frame2,...)). To ignore three frames of cycle 5 at stage position 105.4 mm use (5, "105,4", (1,2,3)).
-              - "std_filter": uses the pump_off std as a reference. All images that have 5% std are automatically ignored during file loading
+              - list of tuples of the form (cycle_number, stage_position as string, frame number). To ignore frames three of cycle 5 at stage position 105.4 mm use (5, "105,4", 3).
 
               Note: Ingoring files can lead to errors if all frames of a single delay step are sorted out. I am working on a fix, handle with care for now.
         """
@@ -239,11 +238,6 @@ class Dataset:
             _position_data = []
             for file in _position_files:
                 _img = np.load(join(_cycle_path,file))
-                # To be fully removed in later version
-                # if isinstance(self.ignore, str) and self.ignore == "std_filter":
-                #     self.real_time_stds.append(_img.std())
-                #     if self.real_time_stds[-1] > 1.1*self._pump_off_std:
-                #         continue
                 self.real_time_intensities.append(_img.sum())
                 self.loaded_files.append(join(_cycle_path,file))
                 
@@ -296,12 +290,11 @@ class Dataset:
         """
         self.ignored_files = [0]
         for ign in self.ignore:
-            for frame in ign[2]:
-                self.ignored_files.append(
-                    join(
-                    join(self.basedir, f"Cycle {int(ign[0])}"), f"z_ProbeOnPumpOn_{ign[1]} mm_Frm{int(frame)}.npy"
-                    )
+            self.ignored_files.append(
+                join(
+                join(self.basedir, f"Cycle {int(ign[0])}"), f"z_ProbeOnPumpOn_{ign[1]} mm_Frm{int(ign[2])}.npy"
                 )
+            )
 
     def _load_pump_offs(self):
         """
@@ -319,10 +312,6 @@ class Dataset:
                 self.pump_offs.append(np.load(pumpoff))
             
         self.pump_off = np.mean(np.array(self.pump_offs), axis=0)
-
-        if isinstance(self.ignore, str) and self.ignore == "std_filter":
-            self.real_time_stds = []
-            self._pump_off_std = self.pump_off.std()
             
 
     def _load_pump_only(self):
