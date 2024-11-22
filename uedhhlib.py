@@ -239,10 +239,11 @@ class Dataset:
             _position_data = []
             for file in _position_files:
                 _img = np.load(join(_cycle_path,file))
-                if isinstance(self.ignore, str) and self.ignore == "std_filter":
-                    self.real_time_stds.append(_img.std())
-                    if self.real_time_stds[-1] > 1.1*self._pump_off_std:
-                        continue
+                # To be fully removed in later version
+                # if isinstance(self.ignore, str) and self.ignore == "std_filter":
+                #     self.real_time_stds.append(_img.std())
+                #     if self.real_time_stds[-1] > 1.1*self._pump_off_std:
+                #         continue
                 self.real_time_intensities.append(_img.sum())
                 self.loaded_files.append(join(_cycle_path,file))
                 
@@ -252,7 +253,7 @@ class Dataset:
                       self.timestamps.append(
                           datetime.fromtimestamp(
                               int(
-                                  findall( r"(?<=\\A1\\)\d+" ,f.readlines()[1])[0]
+                                  findall(r"(?<=\\A1\\)\d+" ,f.readlines()[1])[0]
                                   )
                                 )
                           )
