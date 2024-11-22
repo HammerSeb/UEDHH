@@ -178,7 +178,8 @@ class Dataset:
             self.timestamps, self.real_time_intensities, self.loaded_files = zip(*sorted(
                 zip(self.timestamps, self.real_time_intensities, self.loaded_files )
             ))
-
+            
+        self.timestamps = [timestamp.isoformat() for timestamp in self.timestamps]
 
 
     def save(self, filename: PathLike):
@@ -199,6 +200,7 @@ class Dataset:
             realtime_group = f.create_group("real_time")
             realtime_group.create_dataset("intensity", data=self.real_time_intensities)
             realtime_group.create_dataset("loaded_files", data=self.loaded_files)
+            realtime_group.create_dataset("timestamps", data=self.timestamps)
             if self.all_imgs_flag:
                 realtime_group.create_dataset("all_imgs", data=self.all_imgs)
 
