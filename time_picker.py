@@ -78,17 +78,16 @@ class TimePicker(QtWidgets.QMainWindow):
             
             def _ignored_image_from_filename(filename):
                 
-                extracted_identifiers = findall(r"Cycle\s*(\d+).*?_(\d+,\d+).*?_Frm(\d+)", filename)
+                extracted_identifiers = findall(r"Cycle\s*(\d+).*?_(\d+,\d+).*?_Frm(\d+)", str(filename))[0]
                 
                 return int(extracted_identifiers[0]), extracted_identifiers[1], int(extracted_identifiers[2])
 
-            for file_name in self.loaded_files[region[0],region[1]+1]:
+            for file_name in self.loaded_files[region[0]:region[1]+1]:
                 _cycle, stage_pos, frame_no = _ignored_image_from_filename(file_name)
                 output += f"({_cycle}, {stage_pos}, {frame_no}), "
 
-        #remove last space and comma separator
-        for _ in range(2):
-            output.pop()
+        #remove last space and comma separator and close list
+        output.strip(", ")
         output += "]"
         print(output)
 
@@ -107,7 +106,7 @@ if __name__ == "__main__":
     args = parse_args()
     with h5py.File(args.filepath,"r") as hf:
         timestamps = hf["real_time/timestamps"][()]
-        intensities = hf["real_time/intensities"][()]
+        intensities = hf["real_time/intensity"][()]
         loaded_files = hf["real_time/loaded_files"][()]
 
     app = QtWidgets.QApplication(sys.argv)
