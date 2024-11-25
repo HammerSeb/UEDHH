@@ -156,13 +156,13 @@ class Dataset:
             for cycle in tqdm(cycles):
                 self.data += np.array(self._load_cycle(cycle))
             
-            self.data /= len(self.cycles)#-self._empties
+            self.data /=  (len(self.cycles)-self._empties[:,np.newaxis, np.newaxis])
 
         else:
             for cycle in cycles:
                 self.data += np.array(self._load_cycle(cycle))
             
-            self.data /= len(self.cycles)#-self._empties
+            self.data /= (len(self.cycles)-self._empties[:,np.newaxis, np.newaxis])
 
         # here we sort the data so that small delay times are at low index values just for convenience
         self.delay_times = self.delay_times[::-1]
