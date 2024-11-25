@@ -92,8 +92,10 @@ class Dataset:
             For now, give this parameter an iterable containing the cycle number you want to load, e.g: (1,2,4,7,10,11,12) to load cycles 1,2,4.... you get it
         ignore : list
              option are:
-              - list of tuples of the form (cycle_number, stage_position as string, frame number). To ignore frames three of cycle 5 at stage position 105.4 mm use (5, "105,4", 3).
+              - list of tuples of the form (cycle_number, stage_position as string, frame number). To ignore frames three of cycle 5 at stage position 105.4 mm use (5, 105.4, 3). 
+              Note: Make sure that stage position is given with correct decimal separator "." 
 
+              Should be fixed now!
               Note: Ingoring files can lead to errors if all frames of a single delay step are sorted out. I am working on a fix, handle with care for now.
         """
         
@@ -234,33 +236,37 @@ class Dataset:
                     if _name in file and file.endswith(".npy") and join(_cycle_path,file): #the "and join(...)" condition at the end is unnecessary and should be deleted in future versions
                         _position_files.append(file)
             
+            # check for empty image and fill with zeros in cas
             if not _position_files:
                 self._empties[_idx] +=1
-            
-            _position_data = []
-            for file in _position_files:
-                _img = np.load(join(_cycle_path,file))
-                self.real_time_intensities.append(_img.sum())
-                self.loaded_files.append(join(_cycle_path,file))
-                
-                # extract epoch timestamp from server-path of loaded file
-                _serverpath_file = file.split(".")[0] + ".txt"
-                with open(join(_cycle_path, _serverpath_file), "r") as f:
-                      self.timestamps.append(
-                          datetime.fromtimestamp(
-                              int(
-                                  findall(r"(?<=\\A1\\)\d+" ,f.readlines()[1])[0]
-                                  )
-                                )
-                          )
+                _position_data = np.zeros((1,*self.pump_off.shape))
 
-                if self.all_imgs_flag:
-                    self.all_imgs.append(_img)
-                
-                if self.correct_laser:
-                    _position_data.append((_img - self.pump_only)*self.mask)
-                else:
-                    _position_data.append(_img*self.mask)
+            else:
+                #load images        
+                _position_data = []
+                for file in _position_files:
+                    _img = np.load(join(_cycle_path,file))
+                    self.real_time_intensities.append(_img.sum())
+                    self.loaded_files.append(join(_cycle_path,file))
+                    
+                    # extract epoch timestamp from server-path of loaded file
+                    _serverpath_file = file.split(".")[0] + ".txt"
+                    with open(join(_cycle_path, _serverpath_file), "r") as f:
+                        self.timestamps.append(
+                            datetime.fromtimestamp(
+                                int(
+                                    findall(r"(?<=\\A1\\)\d+" ,f.readlines()[1])[0]
+                                    )
+                                    )
+                            )
+
+                    if self.all_imgs_flag:
+                        self.all_imgs.append(_img)
+                    
+                    if self.correct_laser:
+                        _position_data.append((_img - self.pump_only)*self.mask)
+                    else:
+                        _position_data.append(_img*self.mask)
             
             cycle_data.append(np.mean(_position_data, axis=0))
         return cycle_data
@@ -294,7 +300,7 @@ class Dataset:
         for ign in self.ignore:
             self.ignored_files.append(
                 join(
-                join(self.basedir, f"Cycle {int(ign[0])}"), f"z_ProbeOnPumpOn_{ign[1]} mm_Frm{int(ign[2])}.npy"
+                join(self.basedir, f"Cycle {int(ign[0])}"), f"z_ProbeOnPumpOn_{str(ign[1]).replace(".", ",")} mm_Frm{int(ign[2])}.npy"
                 )
             )
 
