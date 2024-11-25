@@ -80,7 +80,7 @@ class DataPicker(QtWidgets.QMainWindow):
                 
                 extracted_identifiers = findall(r"Cycle\s*(\d+).*?_(\d+,\d+).*?_Frm(\d+)", str(filename))[0]
                 
-                return int(extracted_identifiers[0]), extracted_identifiers[1], int(extracted_identifiers[2])
+                return int(extracted_identifiers[0]), extracted_identifiers[1].replace(",", "."), int(extracted_identifiers[2])
 
             for file_name in self.loaded_files[region[0]:region[1]+1]:
                 _cycle, stage_pos, frame_no = _ignored_image_from_filename(file_name)
