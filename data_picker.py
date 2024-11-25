@@ -11,11 +11,15 @@ from re import findall
 
 from argparse import ArgumentParser
 
+
 def parse_args():
     parser = ArgumentParser()
-    parser.add_argument("filepath", help="filepath to h5 file saved from Dataset from uedhhlib")
+    parser.add_argument(
+        "filepath", help="filepath to h5 file saved from Dataset from uedhhlib"
+    )
     args = parser.parse_args()
     return args
+
 
 class DataPicker(QtWidgets.QMainWindow):
     def __init__(self, timestamps, intensities, loaded_files, *args, **kwargs):
@@ -75,18 +79,24 @@ class DataPicker(QtWidgets.QMainWindow):
                 region[1] = 0
             if region[1] > len(self.timestamps):
                 region[1] = len(self.timestamps - 1)
-            
-            def _ignored_image_from_filename(filename):
-                
-                extracted_identifiers = findall(r"Cycle\s*(\d+).*?_(\d+,\d+).*?_Frm(\d+)", str(filename))[0]
-                
-                return int(extracted_identifiers[0]), extracted_identifiers[1].replace(",", "."), int(extracted_identifiers[2])
 
-            for file_name in self.loaded_files[region[0]:region[1]+1]:
+            def _ignored_image_from_filename(filename):
+
+                extracted_identifiers = findall(
+                    r"Cycle\s*(\d+).*?_(\d+,\d+).*?_Frm(\d+)", str(filename)
+                )[0]
+
+                return (
+                    int(extracted_identifiers[0]),
+                    extracted_identifiers[1].replace(",", "."),
+                    int(extracted_identifiers[2]),
+                )
+
+            for file_name in self.loaded_files[region[0] : region[1] + 1]:
                 _cycle, stage_pos, frame_no = _ignored_image_from_filename(file_name)
                 output += f"({_cycle}, {stage_pos}, {frame_no}), "
 
-        #remove last space and comma separator and close list
+        # remove last space and comma separator and close list
         output.strip(", ")
         output += "]"
         print(output)
@@ -104,7 +114,7 @@ if __name__ == "__main__":
     import h5py
 
     args = parse_args()
-    with h5py.File(args.filepath,"r") as hf:
+    with h5py.File(args.filepath, "r") as hf:
         timestamps = hf["real_time/timestamps"][()]
         intensities = hf["real_time/intensity"][()]
         loaded_files = hf["real_time/loaded_files"][()]
