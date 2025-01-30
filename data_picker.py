@@ -1,7 +1,6 @@
 ### This tool is adapted from Laurenz Kremeyer, Siwick group, McGill University, Montreal
 
 import sys
-from uedhhlib import Dataset
 import pyqtgraph as pg
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtGui import QKeySequence
