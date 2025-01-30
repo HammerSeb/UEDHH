@@ -280,7 +280,7 @@ class Dataset:
                     with open(join(_cycle_path, _serverpath_file), "r") as f:
                         self.timestamps.append(
                             datetime.fromtimestamp(
-                                int(findall(r"(?<=\\A1\\)\d+", f.readlines()[1])[0])
+                                int(findall(r"(?<=\\A2\\)\d+", f.readlines()[1])[0])
                             )
                         )
 
@@ -310,7 +310,8 @@ class Dataset:
                 self.stage_positions.append(
                     float(findall(r"\d+\,\d*", file)[0].replace(",", "."))
                 )
-
+        self.stage_positions = sorted(self.stage_positions)
+        
         def delaytime_from_stageposition(position):
             speed_of_light_mm_per_ps = speed_of_light * 1e3 / 1e12
             pos_zero = max(self.stage_positions)
