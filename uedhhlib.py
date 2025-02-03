@@ -1,4 +1,4 @@
-from typing import Union, Literal
+from typing import Union, Literal, Tuple
 import numpy as np
 from PIL import Image
 from os import PathLike, listdir
@@ -365,3 +365,36 @@ class Dataset:
                 self.pump_onlys.append(np.load(pumponly))
 
         self.pump_only = np.mean(np.array(self.pump_onlys), axis=0)
+
+
+def pvoigt_2d(x: np.ndarray,
+            y: np.ndarray,
+            m: float,
+            amp: float,
+            center: Tuple,
+            q_form_parameters: Tuple,
+            bg_parameters: Tuple):
+    """2D pseudo-voigt profile with linear background with a general quadratic form Q(x,y) = a*(x-x0)**2 + b*(x-x0)*(y-y0) + c*(y-y0**2). This enables fitting of 2d-line profiles that are rotated with respect to the general xy-coordinate system.  (see: https://en.wikipedia.org/wiki/Gaussian_function#Meaning_of_parameters_for_the_general_equation)
+
+    Parameters
+    ----------
+    x : np.ndarray
+        x-coordinate 
+    y : np.ndarray
+        y-coordinate
+    m : float
+        mixing parameter of lorentz and gaussian line shape (0 <= m <= 1)
+    amp : float
+        amplitude 
+    center : Tuple
+        (x0, y0) center of the profile
+    q_form_parameters : Tuple
+        parameters of the quadratic form (a, b, c)
+    bg_parameters : Tuple
+        parameters for linear background (m_x, m_y, offset), where m_x and m_y are the slopes in x and y direction and offset is a constant offset. 
+    """
+    quadratic_form = q_form_parameters[0] * (x - center[0])**2 + q_form_parameters[1] * (x - center[0]) * (y - center[1]) + q_form_parameters[2] * (y - center[1])**2
+    lorentz = 1 / ( 1 + 4 * quadratic_form)
+    gaussian = np.exp(-4 * np.log(2) * quadratic_form)
+    background = bg_parameters[0] * x + bg_parameters[1] * y + bg_parameters[2] 
+    return amp * (m * lorentz + (1 - m) *  gaussian) + background
