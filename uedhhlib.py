@@ -7,6 +7,7 @@ from re import findall
 from scipy.constants import speed_of_light
 from tqdm import tqdm
 from datetime import datetime
+from lmfit.model import Model, ModelResult
 import h5py
 
 
@@ -367,34 +368,109 @@ class Dataset:
         self.pump_only = np.mean(np.array(self.pump_onlys), axis=0)
 
 
-def pvoigt_2d(x: np.ndarray,
-            y: np.ndarray,
+def pvoigt_2d(xy: Tuple[np.ndarray, np.ndarray],
             m: float,
             amp: float,
-            center: Tuple,
-            q_form_parameters: Tuple,
-            bg_parameters: Tuple):
+            x0: float,
+            y0: float,
+            a: float,
+            b: float,
+            c: float,
+            bg_sx: float,
+            bg_sy: float,
+            bg_offset: float) -> np.ndarray:
     """2D pseudo-voigt profile with linear background with a general quadratic form Q(x,y) = a*(x-x0)**2 + b*(x-x0)*(y-y0) + c*(y-y0**2). This enables fitting of 2d-line profiles that are rotated with respect to the general xy-coordinate system.  (see: https://en.wikipedia.org/wiki/Gaussian_function#Meaning_of_parameters_for_the_general_equation)
 
     Parameters
     ----------
-    x : np.ndarray
-        x-coordinate 
-    y : np.ndarray
-        y-coordinate
+    xy : (np.ndarray, np.ndarray)
+        x- and y-coordinate as tuple of arrays (x,y)
     m : float
         mixing parameter of lorentz and gaussian line shape (0 <= m <= 1)
     amp : float
         amplitude 
-    center : Tuple
-        (x0, y0) center of the profile
-    q_form_parameters : Tuple
-        parameters of the quadratic form (a, b, c)
-    bg_parameters : Tuple
-        parameters for linear background (m_x, m_y, offset), where m_x and m_y are the slopes in x and y direction and offset is a constant offset. 
+    x0 : float
+        center x-value
+    y0 : float
+        center y-value
+    a : float
+        a parameter of quadratic form Q(x,y)
+    b : float
+        b parameter of quadratic form Q(x,y)
+    c : float
+        c parameter of quadratic form Q(x,y)
+    bg_sx : float
+        background, slope in x-direction
+    bg_sy : float
+        background, slope in y-direction
+    bg_offset : float
+        background, constant offset
+
+    Returns
+    -------
+    np.ndarray
+        
     """
-    quadratic_form = q_form_parameters[0] * (x - center[0])**2 + q_form_parameters[1] * (x - center[0]) * (y - center[1]) + q_form_parameters[2] * (y - center[1])**2
+    x, y = xy
+    quadratic_form = a * (x - x0)**2 + b * (x - x0) * (y - y0) + c * (y - y0)**2
     lorentz = 1 / ( 1 + 4 * quadratic_form)
     gaussian = np.exp(-4 * np.log(2) * quadratic_form)
-    background = bg_parameters[0] * x + bg_parameters[1] * y + bg_parameters[2] 
+    background = bg_sx * x + bg_sy * y + bg_offset
     return amp * (m * lorentz + (1 - m) *  gaussian) + background
+
+
+def fit_pvoigt_2d(data: np.ndarray, initial_guess = None) -> ModelResult:
+    """fits a 2d pseudo-voigt profile to a Bragg peak
+
+    Parameters
+    ----------
+    data : np.ndarray
+        2d data containing one Bragg peak
+
+    Returns
+    -------
+    ModelResult
+        lmfit ModelResult of the fitting process
+    """
+
+    nx, ny = data.shape
+
+    # Create coordinate arrays for x and y
+    x = np.arange(nx)
+    y = np.arange(ny)
+    X, Y = np.meshgrid(x, y)  # Note: X and Y have the same shape as data
+
+    # 1D arrays for lmfit:
+    x_flat = X.ravel()
+    y_flat = Y.ravel()
+    data_flat = data.ravel()
+
+    pvoigt_model = Model(pvoigt_2d, independent_vars=['xy'])
+
+    if not initial_guess:
+        pvoigt_params = pvoigt_model.make_params(
+            m=0.5,
+            amp=data.max(),
+            x0 = nx/2, 
+            y0 = ny/2,
+            a = 1 / (2 * (nx / 4)**2),
+            b = 0,
+            c = 1 / (2 * (ny / 4)**2),
+            bg_sx = (data_flat[-1] - data_flat[0])/nx,
+            bg_sy = (data_flat[-1] - data_flat[0])/ny,
+            bg_offset= data.min()
+        )
+    else:
+        pvoigt_params = pvoigt_model.make_params()
+
+        for name, val in zip(pvoigt_model.param_names, initial_guess):
+            pvoigt_params[name].set(value=val)
+
+    pvoigt_params["m"].set(min=0, max=1)
+    pvoigt_params["amp"].set(min=0, max=2*data.max())
+    pvoigt_params["a"].set(min=1 / (2 * (nx)**2)),
+    pvoigt_params["b"].set(min=0),
+    pvoigt_params["c"].set(min=1 / (2 * (ny)**2)),
+    pvoigt_params["bg_offset"].set(min=0),
+    
+    return pvoigt_model.fit(data_flat, pvoigt_params, xy=[x_flat, y_flat], nan_policy="propagate")
