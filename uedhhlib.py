@@ -113,6 +113,7 @@ class Dataset:
         self.progress = progress
         self.cycles = cycles
         self.ignore = ignore
+        self.norm = norm
 
         # decide if all images are kept or not
         if all_imgs:
