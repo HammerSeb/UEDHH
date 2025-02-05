@@ -76,6 +76,7 @@ class Dataset:
         progress: bool = True,
         cycles: Union[int, tuple] = None,
         ignore: list = None,
+        norm: bool = False
     ):
         """
         Loads full UED dataset taken in the SchwEpp group at the MPSD for further analysis.
@@ -95,12 +96,15 @@ class Dataset:
         cycles : Union[int,tuple], optional
             For now, give this parameter an iterable containing the cycle number you want to load, e.g: (1,2,4,7,10,11,12) to load cycles 1,2,4.... you get it
         ignore : list
-             option are:
-              - list of tuples of the form (cycle_number, stage_position as string, frame number). To ignore frames three of cycle 5 at stage position 105.4 mm use (5, 105.4, 3).
-              Note: Make sure that stage position is given with correct decimal separator "."
+            option are:
+            - list of tuples of the form (cycle_number, stage_position as string, frame number). To ignore frames three of cycle 5 at stage position 105.4 mm use (5, 105.4, 3).
+            Note: Make sure that stage position is given with correct decimal separator "."
+            Should be fixed now!
+            Note: Ingoring files can lead to errors if all frames of a single delay step are sorted out. I am working on a fix, handle with care for now.
+        norm : bool, optional
+            normalizes each loaded image to its integrated intensity to counter intensity changes between images (noise due to intensity changes will be the same). This usually needs a mask covering the main beam and the beam block, by default False.
 
-              Should be fixed now!
-              Note: Ingoring files can lead to errors if all frames of a single delay step are sorted out. I am working on a fix, handle with care for now.
+
         """
 
         self.basedir = basedir
