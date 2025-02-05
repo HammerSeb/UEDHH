@@ -76,6 +76,7 @@ class Dataset:
         progress: bool = True,
         cycles: Union[int, tuple] = None,
         ignore: list = None,
+        norm: bool = False
     ):
         """
         Loads full UED dataset taken in the SchwEpp group at the MPSD for further analysis.
@@ -85,7 +86,7 @@ class Dataset:
         basedir : PathLike
             base directory cotaining the "Cycle X" directories
         mask : np.ndarray, optional
-            constant mask applied to all images of the delay scans. If 'None' all points of the images are used, by default None
+            constant mask applied to all images of the delay scans. Mask should be array of bool values where False values mark used points. If 'None' all points of the images are used, by default None
         correct_laser : bool, optional
             wether laser background is corrected for or not, by default True
         all_imgs : bool, optional
@@ -95,12 +96,15 @@ class Dataset:
         cycles : Union[int,tuple], optional
             For now, give this parameter an iterable containing the cycle number you want to load, e.g: (1,2,4,7,10,11,12) to load cycles 1,2,4.... you get it
         ignore : list
-             option are:
-              - list of tuples of the form (cycle_number, stage_position as string, frame number). To ignore frames three of cycle 5 at stage position 105.4 mm use (5, 105.4, 3).
-              Note: Make sure that stage position is given with correct decimal separator "."
+            option are:
+            - list of tuples of the form (cycle_number, stage_position as string, frame number). To ignore frames three of cycle 5 at stage position 105.4 mm use (5, 105.4, 3).
+            Note: Make sure that stage position is given with correct decimal separator "."
+            Should be fixed now!
+            Note: Ingoring files can lead to errors if all frames of a single delay step are sorted out. I am working on a fix, handle with care for now.
+        norm : bool, optional
+            normalizes each loaded image to its integrated intensity to counter intensity changes between images (noise due to intensity changes will be the same). This usually needs a mask covering the main beam and the beam block, by default False.
 
-              Should be fixed now!
-              Note: Ingoring files can lead to errors if all frames of a single delay step are sorted out. I am working on a fix, handle with care for now.
+
         """
 
         self.basedir = basedir
@@ -109,6 +113,7 @@ class Dataset:
         self.progress = progress
         self.cycles = cycles
         self.ignore = ignore
+        self.norm = norm
 
         # decide if all images are kept or not
         if all_imgs:
@@ -141,7 +146,9 @@ class Dataset:
             self.ignored_files = []
 
         # infere standard mask from pump off shape
-        if not self.mask:
+        if isinstance(mask, np.ndarray):
+            self.mask = mask
+        else:
             self.mask = np.ones(self.pump_off.shape)
 
         # get delay time steps, smallest delay time is arbitrarily set to 0 ps
@@ -215,7 +222,7 @@ class Dataset:
         """
         with h5py.File(filename, "w") as f:
             f.create_dataset("time_points", data=self.delay_times)
-            f.create_dataset("valid_mask", data=self.mask)
+            f.create_dataset("valid_mask", data=~self.mask)
             proc_group = f.create_group("processed")
             proc_group.create_dataset("equilibrium", data=self.pump_off)
             proc_group.create_dataset("intensity", data=np.moveaxis(self.data, 0, -1))
@@ -272,7 +279,7 @@ class Dataset:
                 # load images
                 _position_data = []
                 for file in _position_files:
-                    _img = np.load(join(_cycle_path, file))
+                    _img = np.load(join(_cycle_path, file)).astype(float)
                     self.real_time_intensities.append(_img.sum())
                     self.loaded_files.append(join(_cycle_path, file))
 
@@ -285,13 +292,19 @@ class Dataset:
                             )
                         )
 
+                    # save all images
                     if self.all_imgs_flag:
                         self.all_imgs.append(_img)
 
+                    # correct laser background
                     if self.correct_laser:
-                        _position_data.append((_img - self.pump_only) * self.mask)
-                    else:
-                        _position_data.append(_img * self.mask)
+                        _img -= self.pump_only
+                    
+                    # normalize to image intensity
+                    if self.norm:
+                        _img /= np.mean(_img*self.mask)
+                         
+                    _position_data.append(_img*self.mask)
 
             cycle_data.append(np.mean(_position_data, axis=0))
         return cycle_data
