@@ -86,7 +86,7 @@ class Dataset:
         basedir : PathLike
             base directory cotaining the "Cycle X" directories
         mask : np.ndarray, optional
-            constant mask applied to all images of the delay scans. If 'None' all points of the images are used, by default None
+            constant mask applied to all images of the delay scans. Mask should be array of bool values where True values mark used points. If 'None' all points of the images are used, by default None
         correct_laser : bool, optional
             wether laser background is corrected for or not, by default True
         all_imgs : bool, optional
@@ -146,7 +146,9 @@ class Dataset:
             self.ignored_files = []
 
         # infere standard mask from pump off shape
-        if not self.mask:
+        if isinstance(mask, np.ndarray):
+            self.mask = mask
+        else:
             self.mask = np.ones(self.pump_off.shape)
 
         # get delay time steps, smallest delay time is arbitrarily set to 0 ps
@@ -220,7 +222,7 @@ class Dataset:
         """
         with h5py.File(filename, "w") as f:
             f.create_dataset("time_points", data=self.delay_times)
-            f.create_dataset("valid_mask", data=self.mask)
+            f.create_dataset("valid_mask", data=~self.mask)
             proc_group = f.create_group("processed")
             proc_group.create_dataset("equilibrium", data=self.pump_off)
             proc_group.create_dataset("intensity", data=np.moveaxis(self.data, 0, -1))
@@ -277,7 +279,7 @@ class Dataset:
                 # load images
                 _position_data = []
                 for file in _position_files:
-                    _img = np.load(join(_cycle_path, file))
+                    _img = np.load(join(_cycle_path, file)).astype(float)
                     self.real_time_intensities.append(_img.sum())
                     self.loaded_files.append(join(_cycle_path, file))
 
@@ -290,13 +292,19 @@ class Dataset:
                             )
                         )
 
+                    # save all images
                     if self.all_imgs_flag:
                         self.all_imgs.append(_img)
 
+                    # correct laser background
                     if self.correct_laser:
-                        _position_data.append((_img - self.pump_only) * self.mask)
-                    else:
-                        _position_data.append(_img * self.mask)
+                        _img -= self.pump_only
+                    
+                    # normalize to image intensity
+                    if self.norm:
+                        _img /= np.mean(_img*self.mask)
+                         
+                    _position_data.append(_img*self.mask)
 
             cycle_data.append(np.mean(_position_data, axis=0))
         return cycle_data
@@ -381,9 +389,7 @@ def pvoigt_2d(
     y0: float,
     a: float,
     b: float,
-    c: float,
-    bg_sx: float,
-    bg_sy: float,
+    c: float,#[
     bg_offset: float,
 ) -> np.ndarray:
     """2D pseudo-voigt profile with linear background with a general quadratic form Q(x,y) = a*(x-x0)**2 + b*(x-x0)*(y-y0) + c*(y-y0**2). This enables fitting of 2d-line profiles that are rotated with respect to the general xy-coordinate system.  (see: https://en.wikipedia.org/wiki/Gaussian_function#Meaning_of_parameters_for_the_general_equation)
