@@ -389,7 +389,9 @@ def pvoigt_2d(
     y0: float,
     a: float,
     b: float,
-    c: float,#[
+    c: float,
+    bg_sx: float,
+    bg_sy: float,
     bg_offset: float,
 ) -> np.ndarray:
     """2D pseudo-voigt profile with linear background with a general quadratic form Q(x,y) = a*(x-x0)**2 + b*(x-x0)*(y-y0) + c*(y-y0**2). This enables fitting of 2d-line profiles that are rotated with respect to the general xy-coordinate system.  (see: https://en.wikipedia.org/wiki/Gaussian_function#Meaning_of_parameters_for_the_general_equation)
