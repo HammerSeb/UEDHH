@@ -86,7 +86,7 @@ class Dataset:
         basedir : PathLike
             base directory cotaining the "Cycle X" directories
         mask : np.ndarray, optional
-            constant mask applied to all images of the delay scans. Mask should be array of bool values where True values mark used points. If 'None' all points of the images are used, by default None
+            constant mask applied to all images of the delay scans. Mask should be array of bool values where False values mark used points. If 'None' all points of the images are used, by default None
         correct_laser : bool, optional
             wether laser background is corrected for or not, by default True
         all_imgs : bool, optional
