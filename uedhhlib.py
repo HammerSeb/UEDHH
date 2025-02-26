@@ -5,6 +5,7 @@ from os import PathLike, listdir
 from os.path import join, isfile
 from re import findall
 from scipy.constants import speed_of_light
+from scipy.ndimage import median_filter, generic_filter
 from tqdm import tqdm
 from datetime import datetime
 from lmfit.model import Model, ModelResult
@@ -76,7 +77,8 @@ class Dataset:
         progress: bool = True,
         cycles: Union[int, tuple] = None,
         ignore: list = None,
-        norm: bool = False
+        norm: bool = False,
+        hotpx_removal: bool = False
     ):
         """
         Loads full UED dataset taken in the SchwEpp group at the MPSD for further analysis.
@@ -103,7 +105,8 @@ class Dataset:
             Note: Ingoring files can lead to errors if all frames of a single delay step are sorted out. I am working on a fix, handle with care for now.
         norm : bool, optional
             normalizes each loaded image to its integrated intensity to counter intensity changes between images (noise due to intensity changes will be the same). This usually needs a mask covering the main beam and the beam block, by default False.
-
+        hotpx_removal : bool, optional
+            whether hot pixels should be smoothed in every image by comparing with neighboring pixels (median). 
 
         """
 
@@ -114,6 +117,7 @@ class Dataset:
         self.cycles = cycles
         self.ignore = ignore
         self.norm = norm
+        self.hotpx_removal = hotpx_removal
 
         # decide if all images are kept or not
         if all_imgs:
@@ -280,6 +284,13 @@ class Dataset:
                 _position_data = []
                 for file in _position_files:
                     _img = np.load(join(_cycle_path, file)).astype(float)
+
+                    # correct laser background
+                    if self.correct_laser:
+                        _img -= self.pump_only
+                    # remove hot pixels
+                    if self.hotpx_removal:
+                        _, _img = self.hotpixel_filter(_img)
                     self.real_time_intensities.append(_img.sum())
                     self.loaded_files.append(join(_cycle_path, file))
 
@@ -295,10 +306,6 @@ class Dataset:
                     # save all images
                     if self.all_imgs_flag:
                         self.all_imgs.append(_img)
-
-                    # correct laser background
-                    if self.correct_laser:
-                        _img -= self.pump_only
                     
                     # normalize to image intensity
                     if self.norm:
@@ -379,6 +386,75 @@ class Dataset:
                 self.pump_onlys.append(np.load(pumponly))
 
         self.pump_only = np.mean(np.array(self.pump_onlys), axis=0)
+
+    def hotpixel_filter(self, data, tolerance=3, size=10, method: str = "mad_local"):
+        """
+        Reduce the noise in the given 2D dataset.
+        Returns the positions of outliers and the corrected image.
+
+        Implemented methods for outlier detection (check corresponding functions for details):
+        - "mad": Median absolute deviation
+        - "mad_local": Median absolute deviation of nearest neighbors.
+        - "std_local": Standard deviation of nearest neighbors (very slow)
+        """
+        # The data type of the original images is an unsigned int which is not very practical for calculating.
+        if data.dtype != "float64":
+            data = np.array(data, dtype="float64")
+
+        blurred = median_filter(data, size=size)
+        match method.lower():
+            case "mad":
+                outliers = self.find_outlier_pixels_mad(data, blurred, tolerance, size)
+            case "mad_local":
+                outliers = self.find_outlier_pixels_mad_local(data, blurred, tolerance, size)
+            case "std_local":
+                outliers = self.find_outlier_pixels_std(data, blurred, tolerance, size)
+            case _:
+                raise ValueError(
+                    f"Unknown method {method}. Allowed values are ['mad', 'mad_local', 'std_local']."
+                )
+
+        fixed_image = np.copy(data)  # This is the image with the hot pixels removed
+        for y, x in zip(outliers[0], outliers[1]):
+            fixed_image[y, x] = blurred[y, x]
+
+        return outliers, fixed_image
+    
+    def find_outlier_pixels_mad(self, data, blurred, tolerance, size):
+        """Find outliers with the median absolut deviation (MAD)"""
+        difference = np.abs(data - blurred)
+
+        # Allow the difference of a pixel and the median of the whole image
+        # to be `tolerance` times larger than the median of the whole image of differences.
+        MAD = np.median(difference)
+        k = 1.4826  # from https://en.wikipedia.org/wiki/Median_absolute_deviation#Relation_to_standard_deviation
+        threshold = tolerance * MAD * k
+
+        # find the hot pixels
+        outliers = np.nonzero(difference > threshold)
+        return outliers
+
+    def find_outlier_pixels_mad_local(self, data, blurred, tolerance, size):
+        """Find outliers with the median absolut deviation (MAD)"""
+        difference = np.abs(data - blurred)
+
+        # Allow the difference of a pixel and its local median
+        # to be `tolerance` times larger than the local median of differences.
+        MAD = median_filter(difference, size=size)
+        k = 1.4826  # from https://en.wikipedia.org/wiki/Median_absolute_deviation#Relation_to_standard_deviation
+        threshold = tolerance * MAD * k
+
+        # find the hot pixels
+        outliers = np.nonzero(difference > threshold)
+        return outliers
+    
+    def find_outlier_pixels_std(self, data, blurred, tolerance, size):
+        """Find outliers by finding the standard deviation in a local window (based on size)."""
+        difference = data - blurred
+        threshold = tolerance * generic_filter(difference, np.std, size=size)
+        outliers = np.nonzero(np.abs(difference) > threshold)
+        return outliers
+
 
 
 def pvoigt_2d(
