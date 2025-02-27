@@ -78,7 +78,7 @@ class Dataset:
         cycles: Union[int, tuple] = None,
         ignore: list = None,
         norm: bool = False,
-        hotpx_removal: bool = False
+        hotpx_removal: bool = False,
     ):
         """
         Loads full UED dataset taken in the SchwEpp group at the MPSD for further analysis.
@@ -106,7 +106,7 @@ class Dataset:
         norm : bool, optional
             normalizes each loaded image to its integrated intensity to counter intensity changes between images (noise due to intensity changes will be the same). This usually needs a mask covering the main beam and the beam block, by default False.
         hotpx_removal : bool, optional
-            whether hot pixels should be smoothed in every image by comparing with neighboring pixels (median). 
+            whether hot pixels should be smoothed in every image by comparing with neighboring pixels (median).
 
         """
 
@@ -308,12 +308,12 @@ class Dataset:
                     # save all images
                     if self.all_imgs_flag:
                         self.all_imgs.append(_img)
-                    
+
                     # normalize to image intensity
                     if self.norm:
-                        _img /= np.mean(_img*self.mask)
-                         
-                    _position_data.append(_img*self.mask)
+                        _img /= np.mean(_img * self.mask)
+
+                    _position_data.append(_img * self.mask)
 
             cycle_data.append(np.mean(_position_data, axis=0))
         return cycle_data
@@ -408,7 +408,9 @@ class Dataset:
             case "mad":
                 outliers = self.find_outlier_pixels_mad(data, blurred, tolerance, size)
             case "mad_local":
-                outliers = self.find_outlier_pixels_mad_local(data, blurred, tolerance, size)
+                outliers = self.find_outlier_pixels_mad_local(
+                    data, blurred, tolerance, size
+                )
             case "std_local":
                 outliers = self.find_outlier_pixels_std(data, blurred, tolerance, size)
             case _:
@@ -421,7 +423,7 @@ class Dataset:
             fixed_image[y, x] = blurred[y, x]
 
         return outliers, fixed_image
-    
+
     def find_outlier_pixels_mad(self, data, blurred, tolerance, size):
         """Find outliers with the median absolut deviation (MAD)"""
         difference = np.abs(data - blurred)
@@ -449,14 +451,13 @@ class Dataset:
         # find the hot pixels
         outliers = np.nonzero(difference > threshold)
         return outliers
-    
+
     def find_outlier_pixels_std(self, data, blurred, tolerance, size):
         """Find outliers by finding the standard deviation in a local window (based on size)."""
         difference = data - blurred
         threshold = tolerance * generic_filter(difference, np.std, size=size)
         outliers = np.nonzero(np.abs(difference) > threshold)
         return outliers
-
 
 
 def pvoigt_2d(
