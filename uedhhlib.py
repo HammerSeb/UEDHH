@@ -287,6 +287,8 @@ class Dataset:
 
                     # correct laser background
                     if self.correct_laser:
+                        if self.hotpx_removal:
+                            _, self.pump_only = self.hotpixel_filter(self.pump_only)
                         _img -= self.pump_only
                     # remove hot pixels
                     if self.hotpx_removal:
