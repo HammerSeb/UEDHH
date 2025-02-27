@@ -156,9 +156,9 @@ class Dataset:
 
         # infere standard mask from pump off shape
         if isinstance(mask, np.ndarray):
-            self.mask = mask
+            self.mask = mask.astype(bool)
         else:
-            self.mask = np.ones(self.bckgr.shape)
+            self.mask = np.ones(self.bckgr.shape, dtype=bool)
 
         # get delay time steps, smallest delay time is arbitrarily set to 0 ps
         if self.progress:
