@@ -96,8 +96,7 @@ class DataPicker(QtWidgets.QMainWindow):
                 output += f"({_cycle}, {stage_pos}, {frame_no}), "
 
         # remove last space and comma separator and close list
-        output.strip(", ")
-        output += "]"
+        output = output.rstrip(", ") + "]"
         print(output)
 
     @property
