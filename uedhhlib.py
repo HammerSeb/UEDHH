@@ -2,7 +2,7 @@ from typing import Union, Literal, Tuple
 import numpy as np
 from PIL import Image
 from os import PathLike, listdir
-from os.path import join, isfile
+from os.path import join, isfile, exists
 from re import findall
 from scipy.constants import speed_of_light
 from scipy.ndimage import median_filter, generic_filter
@@ -130,6 +130,11 @@ class Dataset:
         self.loaded_files = []
         self.timestamps = []
 
+        # load background files
+        if self.progress:
+            print("loading background images")
+        self._load_bckgr()
+
         # load pump off files
         if self.progress:
             print("loading pump offs")
@@ -151,9 +156,9 @@ class Dataset:
 
         # infere standard mask from pump off shape
         if isinstance(mask, np.ndarray):
-            self.mask = mask
+            self.mask = mask.astype(bool)
         else:
-            self.mask = np.ones(self.pump_off.shape)
+            self.mask = np.ones(self.bckgr.shape, dtype=bool)
 
         # get delay time steps, smallest delay time is arbitrarily set to 0 ps
         if self.progress:
@@ -164,12 +169,12 @@ class Dataset:
             for position in self.stage_positions
         ]
 
-        # this array stores how many times a delay time step has no entry per cycle because all frames of a cycle at this state position had to be ignored due to arcing
+        # this array stores how many times a delay time step has no entry per cycle because all frames of a cycle at this state position had to be ignored due to arcing or due to skipping this position for unknown reasons 
         self._empties = np.zeros(len(self.delay_times))
 
         # This is were all the data from each cycle is loaded and averaged
         self.data = np.zeros(
-            (len(self.delay_times), self.pump_off.shape[0], self.pump_off.shape[1])
+            (len(self.delay_times), self.bckgr.shape[0], self.bckgr.shape[1])
         )
         if self.progress:
             print("loading cycles")
@@ -239,7 +244,7 @@ class Dataset:
 
     def _load_cycle(self, cycle: int) -> list:
         """
-        loads the data of cycle one.
+        loads the data of one cycle.
 
         Parameters
         ----------
@@ -257,27 +262,24 @@ class Dataset:
         for _idx, position in enumerate(self.stage_positions):
             _position_files = []
             _name = f"z_ProbeOnPumpOn_{str(position).replace(".",",")} mm_Frm"
-            if isinstance(self.ignore, list):
-                for file in _filelist:
-                    if (
-                        _name in file
-                        and file.endswith(".npy")
-                        and join(_cycle_path, file) not in self.ignored_files
-                    ):
-                        _position_files.append(file)
-            else:
-                for file in _filelist:
-                    if (
-                        _name in file
-                        and file.endswith(".npy")
-                        and join(_cycle_path, file)
-                    ):  # the "and join(...)" condition at the end is unnecessary and should be deleted in future versions
-                        _position_files.append(file)
+            for file in _filelist:
+                if _name in file:
+                    if isinstance(self.ignore, list):
+                        if (
+                            file.endswith(".npy")
+                            and join(_cycle_path, file) not in self.ignored_files
+                        ):
+                            _position_files.append(file)
+                    else:
+                        if( 
+                            file.endswith(".npy")
+                        ):  
+                            _position_files.append(file)
 
             # check for empty image and fill with zeros in cas
             if not _position_files:
                 self._empties[_idx] += 1
-                _position_data = np.zeros((1, *self.pump_off.shape))
+                _position_data = np.zeros((1, *self.bckgr.shape))
 
             else:
                 # load images
@@ -320,20 +322,30 @@ class Dataset:
 
     def _get_delay_times_mapping(self):
         """
-        get the delay time steps from Cycle 1
+        get the delay time steps from logfile in Cycle 1
 
         Returns
         -------
         function
             this function maps a stage position to a relative time with respect to the lowest delay time
         """
-        self.stage_positions = []
-        for file in sorted(listdir(join(self.basedir, "Cycle 1"))):
-            if "ProbeOnPumpOn" in file and "Frm1" in file and file.endswith(".npy"):
-                self.stage_positions.append(
-                    float(findall(r"\d+\,\d*", file)[0].replace(",", "."))
-                )
-        self.stage_positions = sorted(self.stage_positions)
+        self.logfile = [] # floats of every stage position entry in the logfile.txt (logfile always has every position)
+        self.stage_positions = [] # floats of stage positions that should be in stage.txt (not all are in the stage.txt for every cycle)
+
+        logfile_path = join(self.basedir, "Cycle 1", "logfile.txt")
+
+        # First read the logfile and find all existing stagepositions 
+        if exists(logfile_path): 
+            with open(logfile_path, 'r') as logfile:
+                for line in logfile:
+                    if line.startswith("#"): 
+                        continue
+                    pos = float(line.strip().split("\t")[1])
+                    self.logfile.append(pos)
+                    self.stage_positions.append(round(pos, 2))
+
+            self.stage_positions = sorted(self.stage_positions)
+            
 
         def delaytime_from_stageposition(position):
             speed_of_light_mm_per_ps = speed_of_light * 1e3 / 1e12
@@ -370,7 +382,10 @@ class Dataset:
             for pumpoff in sorted(_pump_off_list):
                 self.pump_offs.append(np.load(pumpoff))
 
-        self.pump_off = np.mean(np.array(self.pump_offs), axis=0)
+        if self.pump_offs:
+            self.pump_off = np.mean(np.array(self.pump_offs), axis=0)
+        else:
+            self.pump_off = np.zeros(self.bckgr.shape)
 
     def _load_pump_only(self):
         """
@@ -387,7 +402,31 @@ class Dataset:
             for pumponly in sorted(_pump_only_list):
                 self.pump_onlys.append(np.load(pumponly))
 
-        self.pump_only = np.mean(np.array(self.pump_onlys), axis=0)
+        if self.pump_onlys:
+            self.pump_only = np.mean(np.array(self.pump_onlys), axis=0)
+        else:
+            self.pump_only = np.zeros(self.bckgr.shape)
+
+    def _load_bckgr(self):
+        """
+        loads the background data of all cycles and makes a mean background image from all of them. 
+        mainly to use its shape, because so far every measurement has background images
+        """
+        self.bckgrs = []
+        for cycle in self.cycles:
+            _cycle_path = join(self.basedir, f"Cycle {int(cycle)}")
+            _bckgr_list = []
+            for file in listdir(_cycle_path):
+                if "ProbeOffPumpOff" in file and file.endswith(".npy"):
+                    _bckgr_list.append(join(_cycle_path, file))
+
+            for bckgr in sorted(_bckgr_list):
+                self.bckgrs.append(np.load(bckgr))
+
+        if self.bckgrs:
+            self.bckgr = np.mean(np.array(self.bckgrs), axis=0)
+        else:
+            self.bckgr = None
 
     def hotpixel_filter(self, data, tolerance=3, size=10, method: str = "mad_local"):
         """
